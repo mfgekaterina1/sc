@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Essen: Лови слова рукой!</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #43A047;
+            font-family: 'Arial', sans-serif;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        h1 {
+            margin: 10px 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        #hud {
+            display: flex;
+            gap: 30px;
+            font-size: 22px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        #game-area {
+            position: relative;
+            width: 400px;
+            height: 500px;
+            background-color: rgba(255, 255, 255, 0.15);
+            border: 3px solid white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .word {
+            position: absolute;
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 1px 1px 3px #000;
+            pointer-events: none;
+        }
+        #basket {
+            position: absolute;
+            bottom: 10px;
+            width: 60px;
+            height: 40px;
+            font-size: 40px;
+            text-align: center;
+            line-height: 40px;
+            transition: left 0.05s linear;
+        }
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.75);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 15px;
+            z-index: 10;
+        }
+        .overlay.hidden {
+            display: none;
+        }
+        button {
+            padding: 12px 30px;
+            font-size: 18px;
+            background-color: #FFC107;
+            color: #333;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 15px;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #FFD54F;
+        }
+        .instruction {
+            font-size: 15px;
+            max-width: 320px;
+            margin: 10px auto;
+            line-height: 1.5;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🍎 Лови слова: Essen</h1>
+    <div id="hud">
+        <div>Очки: <span id="score">0</span></div>
+        <div>Жизни: <span id="lives">❤️❤️❤️</span></div>
+    </div>
+
+    <div id="game-area">
+        <div id="basket">🧺</div>
+        
+        <div id="start-screen" class="overlay">
+            <h2>Essen: Лови слова рукой!</h2>
+            <p class="instruction">Управляй корзинкой с помощью мыши или пальца.<br>
+            Лови только слова, связанные с едой (Essen)!<br>
+            Избегай лишних слов.</p>
+            <button id="start-btn">Старт</button>
+        </div>
+
+        <div id="game-over-screen" class="overlay hidden">
+            <h2>Игра окончена!</h2>
+            <p style="font-size: 20px;">Твой счет: <span id="final-score">0</span></p>
+            <button id="restart-btn">Играть снова</button>
+        </div>
+    </div>
+
+    <script>
+        const foodWords = ['Apfel', 'Brot', 'Käse', 'Milch', 'Ei', 'Fisch', 'Fleisch', 'Nudeln', 'Tomate', 'Karotte', 'Kartoffel', 'Banane'];
+        const otherWords = ['Auto', 'Haus', 'Baum', 'Buch', 'Tisch', 'Stuhl', 'Hund', 'Katze', 'Schule', 'Computer'];
+        
+        const gameArea = document.getElementById('game-area');
+        const basket = document.getElementById('basket');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const scoreEl = document.getElementById('score');
+        const livesEl = document.getElementById('lives');
+        const finalScoreEl = document.getElementById('final-score');
+
+        let score = 0;
+        let lives = 3;
+        let gameInterval;
+        let words = [];
+        let basketX = 170;
+        
+        const MIN_VERTICAL_GAP = 76;
+
+        function updateLives() {
+            livesEl.textContent = '❤️'.repeat(lives) + '🖤'.repeat(3 - lives);
+        }
+
+        function moveBasket(e) {
+            const rect = gameArea.getBoundingClientRect();
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let x = clientX - rect.left - 30; 
+            if (x < 0) x = 0;
+            if (x > rect.width - 60) x = rect.width - 60;
+            basketX = x;
+            basket.style.left = x + 'px';
+        }
+
+        gameArea.addEventListener('mousemove', moveBasket);
+        gameArea.addEventListener('touchmove', moveBasket);
+
+        function canSpawnWord() {
+            return !words.some(w => w.y < MIN_VERTICAL_GAP);
+        }
+
+        function spawnWord() {
+            if (!canSpawnWord()) return;
+            
+            const isFood = Math.random() > 0.4;
+            const list = isFood ? foodWords : otherWords;
+            const text = list[Math.floor(Math.random() * list.length)];
+            
+            const el = document.createElement('div');
+            el.className = 'word';
+            el.textContent = text;
+            el.dataset.food = isFood ? '1' : '0';
+            
+            const maxX = gameArea.clientWidth - 80;
+            const x = Math.random() * maxX;
+            el.style.left = x + 'px';
+            el.style.top = '-30px';
+            
+            gameArea.appendChild(el);
+            // СКОРОСТЬ ЕЩЁ ЧУТЬ ВЫШЕ: от 10 до 15 пикселей за кадр
+            words.push({ el, x, y: -30, speed: 10 + Math.random() * 5, isFood });
+        }
+
+        function gameLoop() {
+            for (let i = words.length - 1; i >= 0; i--) {
+                const w = words[i];
+                w.y += w.speed;
+                w.el.style.top = w.y + 'px';
+
+                const basketY = gameArea.clientHeight - 50;
+                if (w.y > basketY && w.y < basketY + 40) {
+                    if (w.x > basketX - 20 && w.x < basketX + 60) {
+                        if (w.isFood) {
+                            score += 10;
+                            scoreEl.textContent = score;
+                        } else {
+                            lives--;
+                            updateLives();
+                        }
+                        w.el.remove();
+                        words.splice(i, 1);
+                        continue;
+                    }
+                }
+
+                if (w.y > gameArea.clientHeight) {
+                    if (w.isFood) {
+                        lives--;
+                        updateLives();
+                    }
+                    w.el.remove();
+                    words.splice(i, 1);
+                }
+            }
+
+            if (lives <= 0) {
+                endGame();
+            }
+        }
+
+        function startGame() {
+            score = 0;
+            lives = 3;
+            scoreEl.textContent = score;
+            updateLives();
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            
+            words.forEach(w => w.el.remove());
+            words = [];
+
+            gameInterval = setInterval(() => {
+                spawnWord();
+                gameLoop();
+            }, 800);
+        }
+
+        function endGame() {
+            clearInterval(gameInterval);
+            finalScoreEl.textContent = score;
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame);
+    </script>
+</body>
+</html>
